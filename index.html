@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Legend of the Zelda</title>
+</head>
+<body>
+  <canvas width="900" height="900"></canvas>
+    <audio autoplay loop>
+      <source src="ZeldaMainTheme.mp3" type="audio/mpeg">
+    </audio>
+    <p id="characterSheet" style="position: absolute; left: 1000px; top: 0px;">Character Stats</p>
+    <p id="event" style="position: absolute; left: 1000px; top: 25px">Link! Please save princess Zelda!</p>
+
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+    <script>
+        //Webpage objects
+        var canvas = document.querySelector("canvas");
+        var context = canvas.getContext("2d");
+        var eventLog = document.getElementById("event");
+        var charLog = document.getElementById("characterSheet");
+        //All Board game images set up.
+        var map, LinkIcon, VaatiIcon, ChuChuIcon, RupeeIcon, ZeldaIcon ,MasterSwordIcon;
+        //Board, Player, and others instantiation.
+        var board, Link, enemyList, Vaati, target, MasterSword;
+        //Timers and log triggers
+        var turns = 0;
+        var battleStart = true;
+        var townEnter = true;
+        var playGame = true;
+
+        //Player object
+        function Player() {
+            this.health = 27;
+            this.Rupee = 0;
+            this.TriForce = 10;
+            this.damage = 3;
+            this.xPos = 0;
+            this.yPos = 0;
+        }
+
+        //Enemy object
+        function Enemy(x, y) {
+            this.health = 3;
+            this.Rupee = 5;
+            this.damage = 4;
+            this.TriForce = 2;
+            this.xPos = x;
+            this.yPos = y;
+        }
+
+        //Vaati-Boss object
+        function Vaati() {
+            this.health = 30;
+            this.Rupee = 50;
+            this.TriForce = 6;
+            this.damage = 5;
+            this.defense = 5;
+            this.xPos = 0;
+            this.yPos = 0;
+
+            this.setXY = function(x, y) {
+                this.xPos = x;
+                this.yPos = y;
+            }
+        }
+
+        //MasterSword object
+        function MasterSword(){
+          this.health = 30;
+          this.Rupee = 10;
+          this.TriForce = 5;
+          this.damage = 10;
+          this.xPos = 0;
+          this.yPos = 0;
+          this.setXY = function(x, y) {
+              this.xPos = x;
+              this.yPos = y;
+          }
+        }
+
+        //game board cell initialize
+        function cell(eventNum, hasStats) {
+            this.eventNum = eventNum; //Event numbers
+            this.damage = 0; //Player and enemies damages
+            this.Rupee = 0; //Rupee to score up
+            this.TriForce = 0; //Number of turns
+            var bonusSelector = Math.floor(Math.random() * 4); //Bonus Stat initialize
+            if (hasStats) {
+                if (bonusSelector == 0)
+                    this.damage = Math.floor(Math.random() * 2) + 1;
+                if (bonusSelector == 2)
+                    this.Rupee = Math.floor(Math.random() * 10) + 5;
+                if (bonusSelector == 3)
+                    this.TriForce = Math.floor(Math.random() * 2) + 1;
+            }
+        }
+
+        /*
+        Board numbers
+        1 = Start
+        2 = Rupee
+        3 = Enemy
+        5 = Zelda
+        6 = Vaati
+        7 = MasterSword
+        */
+        function initialize() {
+            //Setting up player, array of enemies spawning at random, vaati, and MasterSword
+            Link = new Player();
+            enemyList = new Array(3);
+            Vaati = new Vaati();
+            MasterSword = new MasterSword();
+
+            //Creation of board by 7x7 matrices.
+            board = new Array(10);
+            for (var x = 0; x < 10; x++) {
+                board[x] = new Array(10);
+                for (var y = 0; y < 10; y++) {
+                    board[x][y] = new cell(0, false);
+                }
+            }
+
+            //set unique locations of board
+            board[7][9] = new cell(5, false); //Goal
+            board[8][9] = new cell(3, false); //Gatekeeper
+            board[6][9] = new cell(3, false); //Gatekeeper2
+            board[7][8] = new cell(3, false); //Gatekeeper3
+            board[4][4] = new cell(7, false); //MasterSword
+            board[0][0] = new cell(1, false); //start position
+
+            //generate enemies
+            for (var placeEnemy = 0; placeEnemy < 8; placeEnemy++) {
+                var tempX = Math.floor(Math.random() * 10);
+                var tempY = Math.floor(Math.random() * 10);
+
+                //if board location is empty(0) generate new enemy in location, else run loop one extra time
+                if (board[tempX][tempY].eventNum == 0) {
+                    //generate position for 6 enemies, then create Vaati
+                    if (placeEnemy < 6) {
+                        board[tempX][tempY] = new cell(3, true);
+                        board[tempX][tempY].Rupee += 2;
+                        board[tempX][tempY].TriForce += 2;
+                        enemyList[placeEnemy] = new Enemy(tempX, tempY);
+                    } else {
+                        board[tempX][tempY] = new cell(6, false);
+                        Vaati.setXY(tempX, tempY);
+                    }
+                } else {
+                    placeEnemy--;
+                }
+            }
+            for (var placeEvent = 0; placeEvent < 7; placeEvent++) {
+                var tempX = Math.floor(Math.random() * 10);
+                var tempY = Math.floor(Math.random() * 10);
+
+                //if board location is empty(0) generate new event in location, else run loop one extra time
+                if (board[tempX][tempY].eventNum == 0) {
+                    //generate position for events at random
+                    board[tempX][tempY] = new cell(2, true); //Rupee genaration
+                    board[tempX][tempY].Rupee += 2;
+                    board[tempX][tempY].TriForce += 3;
+                } else {
+                    placeEvent--;
+                }
+            }
+        }
+
+        //Load up all images that applies in the game
+        $(document).ready(function() {
+            var curGame = new initialize();
+            window.addEventListener("keydown", keydownHandler, false);
+            LinkIcon = new Image();
+            LinkIcon.src = "Link.png";
+            map = new Image();
+            map.src = "background.jpg";
+            VaatiIcon = new Image();
+            VaatiIcon.src = "Vaati.png";
+            ChuChuIcon = new Image();
+            ChuChuIcon.src = "minion.png";
+            RupeeIcon = new Image();
+            RupeeIcon.src = "rupee.png";
+            ZeldaIcon = new Image();
+            ZeldaIcon.src = "Zelda.png";
+            MasterSwordIcon = new Image();
+            MasterSwordIcon.src = "MasterSword.png";
+
+            //set up character stat sheet followed by addEventListener
+            charLog.innerHTML = "Heart: " + Link.health + " Rupee: " + Link.Rupee + " TriForce: " + Link.TriForce + " Attack: " + Link.damage;
+            LinkIcon.addEventListener("load", render, false);
+        })
+
+        function keydownHandler(event) {
+            /*
+            http://keycode.info/ KeyCode source
+            Left(37)
+            Up(38)
+            Right(39)
+            Down(40)
+            */
+            turns++;
+            if (playGame) {
+                //Player character will move to the right by xPos 1
+                if (event.keyCode == 39 && Link.xPos != 9)
+                {
+                    eventLog.innerHTML = "Fool! You can't get away from me!<br>";
+                    Link.xPos += 1;
+                    Link.TriForce--;
+                    battleStart = true;
+                }
+                //Player character will move to the left by xPos -1
+                if (event.keyCode == 37 && Link.xPos != 0)
+                {
+                    eventLog.innerHTML = "Bwhaaa! Princess Zelda is belongs to me!<br>";
+                    Link.xPos -= 1;
+                    Link.TriForce--;
+                    battleStart = true;
+                }
+                //Player character will move to the up by yPos 1
+                if (event.keyCode == 38 && Link.yPos != 9)
+                {
+                    eventLog.innerHTML = "Nice try! HahAA!<br>";
+                    Link.yPos += 1;
+                    Link.TriForce--;
+                    battleStart = true;
+                }
+                //Player character will move to the down by yPos -1
+                if (event.keyCode == 40 && Link.yPos != 0)
+                {
+                    eventLog.innerHTML = "Begone!<br>";
+                    Link.yPos -= 1;
+                    Link.TriForce--;
+                    battleStart = true;
+                }
+                //If player encounters an enemy event3 will trigger
+                else if (board[Link.xPos][Link.yPos].eventNum == 3)
+                {
+                    fight(event);
+                }
+                //If player fights the Vaati event6 will trigger
+                else if (board[Link.xPos][Link.yPos].eventNum == 6)
+                {
+                    VaatiFight(event);
+                }
+                //If player encounters MasterSword's ordeal event7 will trigger
+                else if (board[Link.xPos][Link.yPos].eventNum == 7)
+                {
+                  MasterSwordOrdeal(event);
+                }
+                //If player didn't trigger any fight event, Vaati will move once.
+                else
+                {
+                    VaatiAction();
+                    RupeeCheck();
+                }
+
+                //Check Player health is less than equal to 0, if that happens, make sure playGame set to false;
+                if (Link.health <= 0 || Link.TriForce <= 0) {
+                    if (Link.health <= 0) {
+                        eventLog.innerHTML = "You have fallen by Lord Vaati!";
+                    }
+                    if (Link.TriForce <= 0) {
+                        eventLog.innerHTML = "Lord Vaati have fully gained control of TriForce! Game Over!";
+                    }
+                    playGame = false;
+                }
+                //Check Player have reached to the goal, if that happens, make sure scoreboard pops up and playGame set to false;
+                if (board[Link.xPos][Link.yPos].eventNum == 5) {
+                    eventLog.innerHTML = "Congratulations! <br> You rescued Princess Zelda!<br> Lord Vaati is no more! <br>";
+                    var score = Link.Rupee + Link.damage + Link.TriForce;
+                    eventLog.innerHTML += "Your score was " + score;
+                    playGame = false;
+                }
+
+            }
+
+            render(); //After all actions update graphics
+        }
+
+        //This function renders all images
+        function render() {
+            //draw board with the base image map and set the right position inside canvas
+            context.drawImage(map, 20, 0, 580, 580, 0, 0, canvas.width, canvas.height);
+            //Check if character is fighting or walking
+            if (board[Link.xPos][Link.yPos].eventNum == 3 || board[Link.xPos][Link.yPos].eventNum == 6)
+            {
+                LinkIcon.src = "Link.png";
+            }
+            else
+            {
+                LinkIcon.src = "Link.png";
+            }
+            //Render Player image.
+            context.drawImage(LinkIcon, 0, 0, LinkIcon.width, LinkIcon.height, 10 + Link.xPos * 88.5, canvas.height - 90 - 88.5 * Link.yPos, 80, 80);
+
+            //Vaati will be appears in canvas until his health set to 0
+            if (Vaati.health >= 0)
+            {
+                context.drawImage(VaatiIcon, 0, 0, VaatiIcon.width, VaatiIcon.height, 10 + Vaati.xPos * 88.5, canvas.height - 90 - 88.5 * Vaati.yPos, 80, 80);
+            }
+
+            //For loop statement for render rupee, enemies, Zelda, and MasterSword
+            for (var x = 0; x < 10; x++) {
+                for (var y = 0; y < 10; y++) {
+                    if (board[x][y].eventNum == 2) {
+                        context.drawImage(RupeeIcon, 0, 0, RupeeIcon.width, RupeeIcon.height, 10 + x * 88.5, canvas.height - 90 - 88.5 * y, 80, 80);
+                    }
+                    if (board[x][y].eventNum == 3) {
+                        context.drawImage(ChuChuIcon, 0, 0, ChuChuIcon.width, ChuChuIcon.height, 10 + x * 88.5, canvas.height - 90 - 88.5 * y, 80, 80);
+                    }
+                    if (board[x][y].eventNum == 5) {
+                        context.drawImage(ZeldaIcon, 0, 0, ZeldaIcon.width, ZeldaIcon.height, 10 + x * 88.5, canvas.height - 90 - 88.5 * y, 80, 80);
+                    }
+                    if (board[x][y].eventNum == 7) {
+                        context.drawImage(MasterSwordIcon, 0, 0, MasterSwordIcon.width, MasterSwordIcon.height, 10 + x * 88.5, canvas.height - 90 - 88.5 * y, 80, 80);
+                    }
+                }
+            }
+        }
+
+        //Checks that player interacts with Rupee and which bonus will player receive (Rupee, TriForce)
+        function RupeeCheck() {
+            if (board[Link.xPos][Link.yPos].eventNum == 2) //check event space for bonuses
+            {
+                if (board[Link.xPos][Link.yPos].Rupee != 0) {
+                    Link.Rupee += board[Link.xPos][Link.yPos].Rupee;
+                    board[Link.xPos][Link.yPos].Rupee = 0;
+                    eventLog.innerHTML = "Found Rupee!";
+                }
+                if (board[Link.xPos][Link.yPos].TriForce != 0) {
+                    Link.TriForce += board[Link.xPos][Link.yPos].TriForce;
+                    board[Link.xPos][Link.yPos].TriForce = 0;
+                    eventLog.innerHTML = "Aquired TriForce!";
+                }
+            }
+            charLog.innerHTML = "Heart: " + Link.health + " Rupee: " + Link.Rupee + " TriForce: " + Link.TriForce + " Attack: " + Link.damage;
+        }
+
+        //Fight with ChuChu event3
+        function fight(event)
+        {
+            if (battleStart == true) //Battle events
+            {
+                eventLog.innerHTML = "You engaged ChuChu!<br> Z to Slash<br>";
+                for (var find = 0; find < enemyList.length; find++) {
+                    if (enemyList[find].xPos == Link.xPos && enemyList[find].yPos == Link.yPos) {
+                        target = enemyList[find];
+                    }
+                }
+                battleStart = false;
+            }
+
+            if (event.keyCode == 90) //Attack with sword, boost damage
+            {
+                target.health -= Math.max(((2 + Link.damage)), 0);
+                Link.health -= Math.max((target.damage), 0);
+            }
+
+            if (target.health <= 0) //when target is defeated, gain rewards
+            {
+                eventLog.innerHTML += "ChuChu has been slayed by your sword! <br>";
+                board[target.xPos][target.yPos].eventNum = 0;
+                Link.Rupee += target.Rupee + board[Link.xPos][Link.yPos].Rupee;
+                Link.TriForce += target.TriForce + board[Link.xPos][Link.yPos].TriForce;
+                battleStart = true;
+            }
+            charLog.innerHTML = "Hp: " + Link.health + " Rupee: " + Link.Rupee + " TriForce: " + Link.TriForce;
+        }
+
+        function VaatiAction() {
+            //Every x turns the Vaati moves one square
+            if (turns % 1 == 0) {
+                var VaatiDirect = Math.floor(Math.random() * 4);
+                board[Vaati.xPos][Vaati.yPos].eventNum = 0;
+                //Vaati Moves to the right
+                if (VaatiDirect == 0 && Vaati.xPos != 9)
+                {
+                    Vaati.xPos += 1;
+                    //If there is any event undo its action and call VaatiAction function again
+                    if (board[Vaati.xPos][Vaati.yPos].eventNum != 0)
+                    {
+                        Vaati.xPos -= 1;
+                        VaatiAction();
+                    }
+                }
+                //Call function again, if Vaati wants to move right but can't move right
+                else if (VaatiDirect == 0 && Vaati.xPos == 9)
+                {
+                    VaatiAction();
+                }
+                //Vaati Moves to the Left
+                else if (VaatiDirect == 1 && Vaati.xPos != 0)
+                {
+                    Vaati.xPos -= 1;
+                    //If there is any event undo its action and call VaatiAction function again
+                    if (board[Vaati.xPos][Vaati.yPos].eventNum != 0)
+                    {
+                        Vaati.xPos += 1;
+                        VaatiAction();
+                    }
+                }
+                //Call function again, if Vaati wants to move left but can't move left
+                else if (VaatiDirect == 1 && Vaati.xPos == 0)
+                {
+                    VaatiAction();
+                }
+                //Vaati Moves to the Up
+                else if (VaatiDirect == 2 && Vaati.yPos != 9)
+                {
+                    Vaati.yPos += 1;
+                    //If there is any event undo its action and call VaatiAction function again
+                    if (board[Vaati.xPos][Vaati.yPos].eventNum != 0)
+                    {
+                        Vaati.yPos -= 1;
+                        VaatiAction();
+                    }
+                }
+                //Call function again, if Vaati wants to move Up but can't move Up
+                else if (VaatiDirect == 2 && Vaati.yPos == 9)
+                {
+                    VaatiAction();
+                }
+                //Vaati Moves to the Down
+                else if (VaatiDirect == 3 && Vaati.yPos != 0)
+                {
+                    Vaati.yPos -= 1;
+                    //If there is any event undo its action and call VaatiAction function again
+                    if (board[Vaati.xPos][Vaati.yPos].eventNum != 0)
+                    {
+                        Vaati.yPos += 1;
+                        VaatiAction();
+                    }
+                }
+                //Call function again, if Vaati wants to move Down but can't move Down
+                else if (VaatiDirect == 3 && Vaati.yPos == 0)
+                {
+                    VaatiAction();
+                }
+                board[Vaati.xPos][Vaati.yPos].eventNum = 6; //Make sure Vaati triggers event6
+            }
+        }
+
+        function VaatiFight(event) //Event6 Vaati Battle
+        {
+            if (battleStart == true) //Battle events
+            {
+                eventLog.innerHTML = "Ha! I got you. Prepare to die!<br>Press Z to Slash<br>";
+                target = Vaati;
+                battleStart = false;
+            }
+
+            if (event.keyCode == 90) //Attack with sword, boost damage
+            {
+                eventLog.innerHTML += "Swish!<br>";
+                target.health -= Math.max(((1 + Link.damage)), 0);
+                Link.health -= Math.max((target.damage), 0);
+            }
+
+            if (target.health <= 0) //when target is defeated, gain rewards
+            {
+                eventLog.innerHTML += "Unbelievable! You defeated Mighty Vaati, Lord of Nightmare! <br>";
+                board[Link.xPos][Link.yPos].eventNum = 0;
+                eventLog.innerHTML += ("Found Rupee! +" + target.Rupee + "<br>");
+                eventLog.innerHTML += ("Found TriForce! +" + target.TriForce + "<br>");
+                eventLog.innerHTML += ("Triforce of Courage provides massive damage! +" + target.damage + "<br>");
+                Link.Rupee += target.Rupee;
+                Link.TriForce += target.TriForce;
+                Link.damage += target.damage;
+                battleStart = true;
+            }
+            charLog.innerHTML = "Heart: " + Link.health + " Rupee: " + Link.Rupee + " TriForce: " + Link.TriForce + " Attack: " + Link.damage;
+        }
+
+        function MasterSwordOrdeal(event) //MasterSword Ordeal Event 7
+        {
+          if (battleStart == true) //On battle initiation
+          {
+              eventLog.innerHTML = "A Warrior of time! Show me your potential<br>";
+              target = MasterSword;
+              battleStart = false;
+          }
+
+          if (event.keyCode == 90) //Grab sword with all might! Make sure to reduce health by 1 everytime player pulls sword
+          {
+              eventLog.innerHTML += "Hiya!!<br>";
+              target.health -= Math.max(((2 + Link.damage)), 0);
+              Link.health -= Math.max((target.damage - 9), 0);
+          }
+
+          if (target.health <= 0) //when target is defeated, gain rewards
+          {
+              eventLog.innerHTML += "MasterSword! Power to punish Evil!<br>";
+              board[Link.xPos][Link.yPos].eventNum = 0;
+              eventLog.innerHTML += ("Found Rupee! +" + target.Rupee + "<br>");
+              eventLog.innerHTML += ("Found TriForce! +" + target.TriForce + "<br>");
+              eventLog.innerHTML += ("MasterSword provides you 10 damage to your stat! +" + target.damage + "<br>");
+              Link.Rupee += target.Rupee;
+              Link.TriForce += target.TriForce;
+              Link.damage += target.damage;
+              battleStart = true;
+          }
+          charLog.innerHTML = "Heart: " + Link.health + " Rupee: " + Link.Rupee + " TriForce: " + Link.TriForce + " Attack: " + Link.damage;
+        }
+    </script>
+
+</body>
+</html>
